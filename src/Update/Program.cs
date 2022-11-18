@@ -95,6 +95,7 @@ namespace Squirrel.Update
                 string processStartArgs = default(string);
                 string setupIcon = default(string);
                 string icon = default(string);
+                string installationPath = default(string);
                 string shortcutArgs = default(string);
                 string frameworkVersion = "net45";
                 bool shouldWait = false;
@@ -125,6 +126,7 @@ namespace Squirrel.Update
                     { "bootstrapperExe=", "Path to the Setup.exe to use as a template", v => bootstrapperExe = v},
                     { "g=|loadingGif=", "Path to an animated GIF to be displayed during installation", v => backgroundGif = v},
                     { "i=|icon", "Path to an ICO file that will be used for icon shortcuts", v => icon = v},
+                    { "installationPath=|iPath", "Path to where application is going to be installed.", v => installationPath = v},
                     { "setupIcon=", "Path to an ICO file that will be used for the Setup executable's icon", v => setupIcon = v},
                     { "n=|signWithParams=", "Sign the installer via SignTool.exe with the parameters given", v => signingParameters = v},
                     { "s|silent", "Silent install", _ => silentInstall = true},
@@ -151,13 +153,14 @@ namespace Squirrel.Update
 #if !MONO
                 case UpdateAction.Install:
                     var progressSource = new ProgressSource();
-                    if (!silentInstall) {
-                        AnimatedGifWindow.ShowWindow(TimeSpan.FromSeconds(4), animatedGifWindowToken.Token, progressSource);
-                    }
+                        if (!silentInstall)
+                        {
+                            AnimatedGifWindow.ShowWindow(TimeSpan.FromSeconds(4), animatedGifWindowToken.Token, progressSource);
+                        }
 
-                    Install(silentInstall, progressSource, Path.GetFullPath(target)).Wait();
-                    animatedGifWindowToken.Cancel();
-                    break;
+                        Install(silentInstall, progressSource, Path.GetFullPath(target), installationPath).Wait();
+                        animatedGifWindowToken.Cancel();
+                        break;
                 case UpdateAction.Uninstall:
                     Uninstall().Wait();
                     break;
@@ -192,7 +195,7 @@ namespace Squirrel.Update
             return 0;
         }
 
-        public async Task Install(bool silentInstall, ProgressSource progressSource, string sourceDirectory = null)
+        public async Task Install(bool silentInstall, ProgressSource progressSource, string sourceDirectory = null, string installationPath = null)
         {
             sourceDirectory = sourceDirectory ?? Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             var releasesPath = Path.Combine(sourceDirectory, "RELEASES");
@@ -210,8 +213,8 @@ namespace Squirrel.Update
 
             var ourAppName = ReleaseEntry.ParseReleaseFile(File.ReadAllText(releasesPath, Encoding.UTF8))
                 .First().PackageName;
-
-            using (var mgr = new UpdateManager(sourceDirectory, ourAppName)) {
+            this.Log().Info("About to install to: " + installationPath);
+            using (var mgr = new UpdateManager(sourceDirectory, ourAppName, installationPath)) {
                 this.Log().Info("About to install to: " + mgr.RootAppDirectory);
                 if (Directory.Exists(mgr.RootAppDirectory)) {
                     this.Log().Warn("Install path {0} already exists, burning it to the ground", mgr.RootAppDirectory);
@@ -234,8 +237,8 @@ namespace Squirrel.Update
 
                 await mgr.FullInstall(silentInstall, progressSource.Raise);
 
-                await this.ErrorIfThrows(() => mgr.CreateUninstallerRegistryEntry(),
-                    "Failed to create uninstaller registry entry");
+                //await this.ErrorIfThrows(() => mgr.CreateUninstallerRegistryEntry(),
+                //    "Failed to create uninstaller registry entry");
             }
         }
 
@@ -267,9 +270,9 @@ namespace Squirrel.Update
 
                 var updateTarget = Path.Combine(mgr.RootAppDirectory, "Update.exe");
 
-                await this.ErrorIfThrows(() =>
-                    mgr.CreateUninstallerRegistryEntry(),
-                    "Failed to create uninstaller registry entry");
+                //await this.ErrorIfThrows(() =>
+                //    mgr.CreateUninstallerRegistryEntry(),
+                //    "Failed to create uninstaller registry entry");
             }
         }
 
